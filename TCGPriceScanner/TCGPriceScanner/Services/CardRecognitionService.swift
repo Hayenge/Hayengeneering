@@ -164,8 +164,18 @@ final class CardRecognitionService {
             return .lorcana
         }
 
-        // Star Wars Unlimited
-        if combined.contains("base set") && (combined.contains("rebel") || combined.contains("empire")) {
+        // Star Wars: Unlimited indicators
+        if combined.contains("star wars") ||
+           combined.contains("rebel alliance") ||
+           combined.contains("galactic empire") ||
+           combined.contains("separatist alliance") ||
+           combined.contains("millennium falcon") ||
+           combined.contains("darth vader") ||
+           combined.contains("luke skywalker") ||
+           combined.contains("clone wars") ||
+           (combined.contains("leader") && combined.contains("force")) ||
+           (combined.contains("rebel") && (combined.contains("force") || combined.contains("base"))) ||
+           (combined.contains("empire") && (combined.contains("force") || combined.contains("base"))) {
             return .starWarsUnlimited
         }
 

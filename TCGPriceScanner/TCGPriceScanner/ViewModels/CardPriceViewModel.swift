@@ -24,6 +24,7 @@ final class CardPriceViewModel: ObservableObject {
     @Published var sortOrder: SortOrder = .priceAscending
 
     // MARK: Price source visibility filters
+    @Published var showCardMarketPrices: Bool = true
     @Published var showTCGPlayerPrices: Bool = true
     @Published var showPriceChartingPrices: Bool = true
 

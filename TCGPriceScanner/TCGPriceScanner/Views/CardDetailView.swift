@@ -17,7 +17,7 @@ struct CardDetailView: View {
                 priceSourceFilter
                 tcgPlayerSection
                 priceChartingSection
-                listingsSection
+                cardMarketSection
             }
             .padding()
         }
@@ -158,20 +158,28 @@ struct CardDetailView: View {
             Text("Price Sources")
                 .font(.headline)
 
-            HStack(spacing: 10) {
-                PriceSourceChip(
-                    title: "TCGPlayer",
-                    systemImage: "dollarsign.circle.fill",
-                    color: .blue,
-                    isSelected: $viewModel.showTCGPlayerPrices
-                )
-                PriceSourceChip(
-                    title: "PriceCharting",
-                    systemImage: "chart.line.uptrend.xyaxis.circle.fill",
-                    color: .green,
-                    isSelected: $viewModel.showPriceChartingPrices
-                )
-                Spacer()
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    PriceSourceChip(
+                        title: "TCGPlayer",
+                        systemImage: "dollarsign.circle.fill",
+                        color: .blue,
+                        isSelected: $viewModel.showTCGPlayerPrices
+                    )
+                    PriceSourceChip(
+                        title: "PriceCharting",
+                        systemImage: "chart.line.uptrend.xyaxis.circle.fill",
+                        color: .green,
+                        isSelected: $viewModel.showPriceChartingPrices
+                    )
+                    PriceSourceChip(
+                        title: "CardMarket",
+                        systemImage: "cart.circle.fill",
+                        color: .orange,
+                        isSelected: $viewModel.showCardMarketPrices
+                    )
+                }
+                .padding(.horizontal, 2)
             }
         }
         .padding()
@@ -368,61 +376,121 @@ struct CardDetailView: View {
         .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 
-    // MARK: - Marketplace Listings (CardMarket backend)
+    // MARK: - CardMarket Section (price guide + marketplace listings)
 
     @ViewBuilder
-    private var listingsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Marketplace Listings")
-                    .font(.headline)
-                Spacer()
+    private var cardMarketSection: some View {
+        if viewModel.showCardMarketPrices {
+            VStack(alignment: .leading, spacing: 12) {
+                // Source header
+                HStack(spacing: 6) {
+                    Image(systemName: "cart.circle.fill")
+                        .foregroundColor(.orange)
+                    Text("CardMarket")
+                        .font(.headline)
+                    Spacer()
+                    if case .loading = viewModel.priceState {
+                        ProgressView().scaleEffect(0.7)
+                    }
+                }
+
+                // Price guide grid
+                switch viewModel.priceState {
+                case .loading:
+                    HStack {
+                        ProgressView()
+                        Text("Fetching CardMarket prices…")
+                            .foregroundColor(.secondary)
+                            .font(.subheadline)
+                    }
+
+                case .loaded(let guide, _):
+                    let g = viewModel.priceGuide ?? guide
+                    cardMarketPriceGrid(g)
+
+                case .error(let msg):
+                    if let cached = viewModel.priceGuide {
+                        cardMarketPriceGrid(cached)
+                    } else {
+                        notConfiguredBanner(message: msg, color: .orange)
+                    }
+
+                case .idle:
+                    EmptyView()
+                }
+
+                Divider()
+
+                // Listings
+                HStack {
+                    Text("Marketplace Listings")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Spacer()
+                    if !viewModel.articles.isEmpty {
+                        Text("\(viewModel.availableListings) listings")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
                 if !viewModel.articles.isEmpty {
-                    Text("\(viewModel.availableListings) listings")
-                        .font(.caption)
+                    listingFilters
+                }
+
+                if case .loading = viewModel.priceState {
+                    HStack { ProgressView(); Spacer() }
+                } else if viewModel.filteredArticles.isEmpty && !viewModel.articles.isEmpty {
+                    Text("No listings match your filters.")
+                        .foregroundColor(.secondary)
+                        .font(.subheadline)
+                } else {
+                    ForEach(viewModel.filteredArticles) { article in
+                        ArticleRowView(article: article)
+                        Divider()
+                    }
+                }
+
+                if viewModel.articles.isEmpty, case .loaded = viewModel.priceState {
+                    Text("No marketplace listings available.")
+                        .foregroundColor(.secondary)
+                        .font(.subheadline)
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+        }
+    }
+
+    @ViewBuilder
+    private func cardMarketPriceGrid(_ g: PriceGuide) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
+            spacing: 12
+        ) {
+            PriceTileView(label: "Low",     value: g.low,   color: .green)
+            PriceTileView(label: "Mid",     value: g.mid,   color: .blue)
+            PriceTileView(label: "High",    value: g.high,  color: .orange)
+            PriceTileView(label: "Trend",   value: g.trend, color: .purple)
+            PriceTileView(label: "Avg (7d)",value: g.avg7,  color: .teal)
+            PriceTileView(label: "Avg (30d)",value: g.avg30,color: .indigo)
+        }
+
+        if let lowFoil = g.lowFoil {
+            HStack {
+                Image(systemName: "sparkles").foregroundColor(.yellow)
+                Text("Foil Low: \(lowFoil.priceString())")
+                    .font(.subheadline)
+                Spacer()
+                if let trendFoil = g.trendFoil {
+                    Text("Foil Trend: \(trendFoil.priceString())")
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
             }
-
-            if !viewModel.articles.isEmpty {
-                listingFilters
-            }
-
-            if case .loading = viewModel.priceState {
-                HStack { ProgressView(); Spacer() }
-            } else if viewModel.filteredArticles.isEmpty && !viewModel.articles.isEmpty {
-                Text("No listings match your filters.")
-                    .foregroundColor(.secondary)
-                    .font(.subheadline)
-            } else {
-                ForEach(viewModel.filteredArticles) { article in
-                    ArticleRowView(article: article)
-                    Divider()
-                }
-            }
-
-            if viewModel.articles.isEmpty, case .loaded = viewModel.priceState {
-                Text("No marketplace listings available.")
-                    .foregroundColor(.secondary)
-                    .font(.subheadline)
-            }
-
-            if case .error(let msg) = viewModel.priceState {
-                if viewModel.articles.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label(msg, systemImage: "exclamationmark.triangle")
-                            .font(.subheadline)
-                            .foregroundColor(.orange)
-                        Button("Retry") { viewModel.refresh() }
-                            .font(.caption)
-                    }
-                }
-            }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
     }
 
     private var listingFilters: some View {
