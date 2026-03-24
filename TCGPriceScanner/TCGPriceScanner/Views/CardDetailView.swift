@@ -13,14 +13,10 @@ struct CardDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-
-                // Card header
                 cardHeader
-
-                // Price guide summary
-                priceGuideSummary
-
-                // Marketplace listings
+                priceSourceFilter
+                tcgPlayerSection
+                priceChartingSection
                 listingsSection
             }
             .padding()
@@ -29,13 +25,7 @@ struct CardDetailView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                if let url = card.cardMarketURL {
-                    Button {
-                        openURL(url)
-                    } label: {
-                        Image(systemName: "arrow.up.right.square")
-                    }
-                }
+                externalLinksMenu
             }
         }
         .task {
@@ -43,11 +33,41 @@ struct CardDetailView: View {
         }
     }
 
+    // MARK: - External Links Menu
+
+    @ViewBuilder
+    private var externalLinksMenu: some View {
+        Menu {
+            if let url = viewModel.tcgPlayerPrice?.url {
+                Button {
+                    openURL(url)
+                } label: {
+                    Label("View on TCGPlayer", systemImage: "arrow.up.right.square")
+                }
+            }
+            if let url = viewModel.priceChartingPrice?.url {
+                Button {
+                    openURL(url)
+                } label: {
+                    Label("View on PriceCharting", systemImage: "arrow.up.right.square")
+                }
+            }
+            if let url = card.cardMarketURL {
+                Button {
+                    openURL(url)
+                } label: {
+                    Label("View on CardMarket", systemImage: "arrow.up.right.square")
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.right.square")
+        }
+    }
+
     // MARK: - Card Header
 
     private var cardHeader: some View {
         HStack(alignment: .top, spacing: 16) {
-            // Card image
             AsyncImage(url: card.imageURL) { phase in
                 switch phase {
                 case .success(let image):
@@ -57,10 +77,7 @@ struct CardDetailView: View {
                 case .failure, .empty:
                     RoundedRectangle(cornerRadius: 8)
                         .fill(card.game.accentColor.opacity(0.2))
-                        .overlay(
-                            Text(card.game.icon)
-                                .font(.largeTitle)
-                        )
+                        .overlay(Text(card.game.icon).font(.largeTitle))
                 @unknown default:
                     ProgressView()
                 }
@@ -103,17 +120,26 @@ struct CardDetailView: View {
                         .foregroundColor(card.game.accentColor)
                 }
 
-                // Trend price chip
-                if let trend = viewModel.priceGuide?.trend {
+                // Best available market price chip
+                if let market = viewModel.tcgPlayerPrice?.marketPrice {
                     Spacer()
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Trend")
+                        Text("Market (TCGPlayer)")
                             .font(.caption2)
                             .foregroundColor(.secondary)
-                        Text(trend.priceString())
+                        Text(market.usdString())
                             .font(.title3)
                             .fontWeight(.semibold)
-                            .foregroundColor(.primary)
+                    }
+                } else if let loose = viewModel.priceChartingPrice?.loosePrice {
+                    Spacer()
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ungraded (PriceCharting)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text(loose.usdString())
+                            .font(.title3)
+                            .fontWeight(.semibold)
                     }
                 }
             }
@@ -125,60 +151,27 @@ struct CardDetailView: View {
         .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
     }
 
-    // MARK: - Price Guide Summary
+    // MARK: - Price Source Filter
 
-    @ViewBuilder
-    private var priceGuideSummary: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Price Overview")
+    private var priceSourceFilter: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Price Sources")
                 .font(.headline)
 
-            switch viewModel.priceState {
-            case .loading:
-                HStack {
-                    ProgressView()
-                    Text("Loading prices…")
-                        .foregroundColor(.secondary)
-                }
-
-            case .loaded(let guide, _), .error where viewModel.priceGuide != nil:
-                let g = viewModel.priceGuide ?? guide
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    PriceTileView(label: "Low", value: g.low, color: .green)
-                    PriceTileView(label: "Mid", value: g.mid, color: .blue)
-                    PriceTileView(label: "High", value: g.high, color: .orange)
-                    PriceTileView(label: "Trend", value: g.trend, color: .purple)
-                    PriceTileView(label: "Avg (7d)", value: g.avg7, color: .teal)
-                    PriceTileView(label: "Avg (30d)", value: g.avg30, color: .indigo)
-                }
-
-                if let lowFoil = g.lowFoil {
-                    Divider()
-                    HStack {
-                        Image(systemName: "sparkles")
-                            .foregroundColor(.yellow)
-                        Text("Foil Low: \(lowFoil.priceString())")
-                            .font(.subheadline)
-                        Spacer()
-                        if let trendFoil = g.trendFoil {
-                            Text("Foil Trend: \(trendFoil.priceString())")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-
-            case .error(let message):
-                VStack(alignment: .leading, spacing: 6) {
-                    Label(message, systemImage: "exclamationmark.triangle")
-                        .font(.subheadline)
-                        .foregroundColor(.orange)
-                    Button("Retry") { viewModel.refresh() }
-                        .font(.caption)
-                }
-
-            case .idle:
-                EmptyView()
+            HStack(spacing: 10) {
+                PriceSourceChip(
+                    title: "TCGPlayer",
+                    systemImage: "dollarsign.circle.fill",
+                    color: .blue,
+                    isSelected: $viewModel.showTCGPlayerPrices
+                )
+                PriceSourceChip(
+                    title: "PriceCharting",
+                    systemImage: "chart.line.uptrend.xyaxis.circle.fill",
+                    color: .green,
+                    isSelected: $viewModel.showPriceChartingPrices
+                )
+                Spacer()
             }
         }
         .padding()
@@ -187,7 +180,195 @@ struct CardDetailView: View {
         .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
     }
 
-    // MARK: - Listings Section
+    // MARK: - TCGPlayer Section
+
+    @ViewBuilder
+    private var tcgPlayerSection: some View {
+        if viewModel.showTCGPlayerPrices {
+            VStack(alignment: .leading, spacing: 12) {
+                // Source header
+                HStack(spacing: 6) {
+                    Image(systemName: "dollarsign.circle.fill")
+                        .foregroundColor(.blue)
+                    Text("TCGPlayer")
+                        .font(.headline)
+                    Spacer()
+                    if case .loading = viewModel.tcgPlayerState {
+                        ProgressView().scaleEffect(0.7)
+                    }
+                }
+
+                switch viewModel.tcgPlayerState {
+                case .loading:
+                    HStack {
+                        ProgressView()
+                        Text("Fetching TCGPlayer prices…")
+                            .foregroundColor(.secondary)
+                            .font(.subheadline)
+                    }
+
+                case .loaded:
+                    if let price = viewModel.tcgPlayerPrice {
+                        tcgPlayerPriceGrid(price)
+                    }
+
+                case .notFound:
+                    Label("Card not found on TCGPlayer.", systemImage: "magnifyingglass")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                case .notConfigured:
+                    notConfiguredBanner(
+                        message: "Add your TCGPlayer API credentials in TCGPlayerConfig to see live prices.",
+                        color: .blue
+                    )
+
+                case .unavailable:
+                    Label("\(card.game.rawValue) is not available on TCGPlayer.", systemImage: "xmark.circle")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                case .error(let msg):
+                    Label(msg, systemImage: "exclamationmark.triangle")
+                        .font(.subheadline)
+                        .foregroundColor(.orange)
+
+                case .idle:
+                    EmptyView()
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+        }
+    }
+
+    @ViewBuilder
+    private func tcgPlayerPriceGrid(_ price: TCGPlayerPrice) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
+            spacing: 12
+        ) {
+            PriceTileView(label: "Market",     value: price.marketPrice,    color: .blue,   currency: "$")
+            PriceTileView(label: "Low",        value: price.lowPrice,       color: .green,  currency: "$")
+            PriceTileView(label: "Mid",        value: price.midPrice,       color: .teal,   currency: "$")
+            PriceTileView(label: "High",       value: price.highPrice,      color: .orange, currency: "$")
+            PriceTileView(label: "Direct Low", value: price.directLowPrice, color: .indigo, currency: "$")
+        }
+
+        if let foilMarket = price.foilMarketPrice {
+            Divider()
+            HStack {
+                Image(systemName: "sparkles").foregroundColor(.yellow)
+                Text("Foil Market: \(foilMarket.usdString())")
+                    .font(.subheadline)
+                Spacer()
+                if let foilLow = price.foilLowPrice {
+                    Text("Foil Low: \(foilLow.usdString())")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: - PriceCharting Section
+
+    @ViewBuilder
+    private var priceChartingSection: some View {
+        if viewModel.showPriceChartingPrices {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
+                        .foregroundColor(.green)
+                    Text("PriceCharting")
+                        .font(.headline)
+                    Spacer()
+                    if case .loading = viewModel.priceChartingState {
+                        ProgressView().scaleEffect(0.7)
+                    }
+                }
+
+                switch viewModel.priceChartingState {
+                case .loading:
+                    HStack {
+                        ProgressView()
+                        Text("Fetching PriceCharting prices…")
+                            .foregroundColor(.secondary)
+                            .font(.subheadline)
+                    }
+
+                case .loaded:
+                    if let price = viewModel.priceChartingPrice {
+                        priceChartingPriceGrid(price)
+                    }
+
+                case .notFound:
+                    Label("Card not found on PriceCharting.", systemImage: "magnifyingglass")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                case .notConfigured:
+                    notConfiguredBanner(
+                        message: "Add your PriceCharting API key in PriceChartingConfig to see live prices.",
+                        color: .green
+                    )
+
+                case .unavailable:
+                    Label("\(card.game.rawValue) is not available on PriceCharting.", systemImage: "xmark.circle")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                case .error(let msg):
+                    Label(msg, systemImage: "exclamationmark.triangle")
+                        .font(.subheadline)
+                        .foregroundColor(.orange)
+
+                case .idle:
+                    EmptyView()
+                }
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.06), radius: 8, y: 2)
+        }
+    }
+
+    @ViewBuilder
+    private func priceChartingPriceGrid(_ price: PriceChartingPrice) -> some View {
+        if let name = price.consoleName {
+            Text(name.capitalized)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+
+        LazyVGrid(
+            columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())],
+            spacing: 12
+        ) {
+            PriceTileView(label: "Ungraded",  value: price.loosePrice,    color: .green,  currency: "$")
+            PriceTileView(label: "Graded",    value: price.gradedPrice,   color: .purple, currency: "$")
+            PriceTileView(label: "New/Sealed",value: price.newPrice,      color: .blue,   currency: "$")
+        }
+    }
+
+    // MARK: - Not Configured Banner
+
+    private func notConfiguredBanner(message: String, color: Color) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "key.fill")
+                .foregroundColor(color)
+            Text(message)
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(10)
+        .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    // MARK: - Marketplace Listings (CardMarket backend)
 
     @ViewBuilder
     private var listingsSection: some View {
@@ -203,7 +384,6 @@ struct CardDetailView: View {
                 }
             }
 
-            // Filters
             if !viewModel.articles.isEmpty {
                 listingFilters
             }
@@ -226,6 +406,18 @@ struct CardDetailView: View {
                     .foregroundColor(.secondary)
                     .font(.subheadline)
             }
+
+            if case .error(let msg) = viewModel.priceState {
+                if viewModel.articles.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(msg, systemImage: "exclamationmark.triangle")
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
+                        Button("Retry") { viewModel.refresh() }
+                            .font(.caption)
+                    }
+                }
+            }
         }
         .padding()
         .background(Color(.systemBackground))
@@ -235,7 +427,6 @@ struct CardDetailView: View {
 
     private var listingFilters: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Sort picker
             HStack {
                 Text("Sort:")
                     .font(.caption)
@@ -249,7 +440,6 @@ struct CardDetailView: View {
                 .font(.caption)
             }
 
-            // Condition filter
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     FilterChip(title: "All", isSelected: viewModel.selectedConditionFilter == nil) {
@@ -264,11 +454,38 @@ struct CardDetailView: View {
                 }
             }
 
-            // Foil toggle
             Toggle("Foil only", isOn: $viewModel.showFoilOnly)
                 .font(.caption)
                 .tint(.yellow)
         }
+    }
+}
+
+// MARK: - Price Source Chip
+
+struct PriceSourceChip: View {
+    let title: String
+    let systemImage: String
+    let color: Color
+    @Binding var isSelected: Bool
+
+    var body: some View {
+        Button {
+            isSelected.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.caption)
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(isSelected ? color : Color(.systemGray5), in: Capsule())
+            .foregroundColor(isSelected ? .white : .secondary)
+        }
+        .animation(.easeInOut(duration: 0.15), value: isSelected)
     }
 }
 
@@ -278,6 +495,7 @@ struct PriceTileView: View {
     let label: String
     let value: Double?
     let color: Color
+    var currency: String = "€"
 
     var body: some View {
         VStack(spacing: 4) {
@@ -285,7 +503,7 @@ struct PriceTileView: View {
                 .font(.caption2)
                 .foregroundColor(.secondary)
             if let value {
-                Text(value.priceString())
+                Text(currency == "$" ? value.usdString() : value.priceString())
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(color)
@@ -353,7 +571,6 @@ struct ArticleRowView: View {
             Text(article.price.priceString())
                 .font(.headline)
                 .fontWeight(.bold)
-                .foregroundColor(.primary)
         }
         .padding(.vertical, 4)
     }
@@ -369,11 +586,11 @@ struct ArticleRowView: View {
 
     private func conditionColor(_ condition: CardCondition) -> Color {
         switch condition {
-        case .mintMint, .nearMint: return .green
-        case .excellentMinus:      return .teal
-        case .goodPlus, .good:     return .blue
-        case .poorlyPlayed:        return .orange
-        case .poor:                return .red
+        case .mintMint, .nearMint:  return .green
+        case .excellentMinus:       return .teal
+        case .goodPlus, .good:      return .blue
+        case .poorlyPlayed:         return .orange
+        case .poor:                 return .red
         }
     }
 

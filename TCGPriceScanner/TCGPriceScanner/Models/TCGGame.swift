@@ -51,4 +51,32 @@ enum TCGGame: String, CaseIterable, Identifiable, Codable {
         case .flesh:                return .red
         }
     }
+
+    /// TCGPlayer category ID. nil = game not listed on TCGPlayer.
+    var tcgPlayerCategoryId: Int? {
+        switch self {
+        case .magicTheGathering:    return 1
+        case .yugioh:               return 2
+        case .pokemon:              return 3
+        case .lorcana:              return 73
+        case .onePiece:             return 62
+        case .starWarsUnlimited:    return 86
+        case .dragonBallSuper:      return nil
+        case .flesh:                return 75
+        }
+    }
+
+    /// PriceCharting console/category slug. nil = game not indexed on PriceCharting.
+    var priceChartingConsoleName: String? {
+        switch self {
+        case .magicTheGathering:    return "magic-the-gathering"
+        case .yugioh:               return "yugioh"
+        case .pokemon:              return "pokemon"
+        case .lorcana:              return "disney-lorcana"
+        case .onePiece:             return "one-piece-card-game"
+        case .starWarsUnlimited:    return nil
+        case .dragonBallSuper:      return "dragon-ball-super-card-game"
+        case .flesh:                return nil
+        }
+    }
 }

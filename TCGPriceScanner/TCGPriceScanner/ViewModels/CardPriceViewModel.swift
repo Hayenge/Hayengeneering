@@ -15,6 +15,7 @@ enum PriceState {
 @MainActor
 final class CardPriceViewModel: ObservableObject {
 
+    // MARK: CardMarket state (search backend + listings)
     @Published var priceState: PriceState = .idle
     @Published var articles: [CardArticle] = []
     @Published var priceGuide: PriceGuide?
@@ -22,19 +23,32 @@ final class CardPriceViewModel: ObservableObject {
     @Published var showFoilOnly: Bool = false
     @Published var sortOrder: SortOrder = .priceAscending
 
-    private let apiService = CardMarketService.shared
+    // MARK: Price source visibility filters
+    @Published var showTCGPlayerPrices: Bool = true
+    @Published var showPriceChartingPrices: Bool = true
+
+    // MARK: TCGPlayer
+    @Published var tcgPlayerPrice: TCGPlayerPrice? = nil
+    @Published var tcgPlayerState: ExternalPriceState = .idle
+
+    // MARK: PriceCharting
+    @Published var priceChartingPrice: PriceChartingPrice? = nil
+    @Published var priceChartingState: ExternalPriceState = .idle
+
+    private let cardMarketService = CardMarketService.shared
+    private let tcgPlayerService  = TCGPlayerService.shared
+    private let priceChartingService = PriceChartingService.shared
     let card: Card
 
     enum SortOrder: String, CaseIterable {
-        case priceAscending = "Price: Low to High"
+        case priceAscending  = "Price: Low to High"
         case priceDescending = "Price: High to Low"
-        case conditionBest = "Best Condition First"
-        case sellerRating = "Seller Rating"
+        case conditionBest   = "Best Condition First"
+        case sellerRating    = "Seller Rating"
     }
 
     init(card: Card) {
         self.card = card
-        // Use cached price guide from search result if available
         if let cached = card.priceGuide {
             priceGuide = cached
         }
@@ -45,33 +59,82 @@ final class CardPriceViewModel: ObservableObject {
     func loadPrices() {
         guard case .idle = priceState else { return }
         priceState = .loading
+        tcgPlayerState = .loading
+        priceChartingState = .loading
 
         Task {
-            do {
-                async let guideTask = apiService.getPriceGuide(productId: card.id)
-                async let articlesTask = apiService.getArticles(productId: card.id, maxResults: 50)
-
-                let (guide, fetchedArticles) = try await (guideTask, articlesTask)
-                priceGuide = guide
-                articles = fetchedArticles
-                priceState = .loaded(guide, fetchedArticles)
-            } catch CardMarketError.notConfigured {
-                // Show cached price guide if available, with a notice
-                if let cached = card.priceGuide {
-                    priceState = .loaded(cached, [])
-                } else {
-                    priceState = .error("Add your CardMarket API credentials to see live prices.")
-                }
-            } catch {
-                priceState = .error(error.localizedDescription)
-            }
+            async let cmTask: Void   = loadCardMarketPrices()
+            async let tcgTask: Void  = loadTCGPlayerPrices()
+            async let pcTask: Void   = loadPriceChartingPrices()
+            _ = await (cmTask, tcgTask, pcTask)
         }
     }
 
     func refresh() {
         priceState = .idle
         articles = []
+        tcgPlayerPrice = nil
+        tcgPlayerState = .idle
+        priceChartingPrice = nil
+        priceChartingState = .idle
         loadPrices()
+    }
+
+    // MARK: - CardMarket (listings backend)
+
+    private func loadCardMarketPrices() async {
+        do {
+            async let guideTask    = cardMarketService.getPriceGuide(productId: card.id)
+            async let articlesTask = cardMarketService.getArticles(productId: card.id, maxResults: 50)
+            let (guide, fetchedArticles) = try await (guideTask, articlesTask)
+            priceGuide = guide
+            articles   = fetchedArticles
+            priceState = .loaded(guide, fetchedArticles)
+        } catch CardMarketError.notConfigured {
+            if let cached = card.priceGuide {
+                priceState = .loaded(cached, [])
+            } else {
+                priceState = .error("Add your CardMarket API credentials to see marketplace listings.")
+            }
+        } catch {
+            priceState = .error(error.localizedDescription)
+        }
+    }
+
+    // MARK: - TCGPlayer
+
+    private func loadTCGPlayerPrices() async {
+        guard let categoryId = card.game.tcgPlayerCategoryId else {
+            tcgPlayerState = .unavailable
+            return
+        }
+        do {
+            let price = try await tcgPlayerService.searchPrice(name: card.name, categoryId: categoryId)
+            tcgPlayerPrice = price
+            tcgPlayerState = price != nil ? .loaded : .notFound
+        } catch TCGPlayerError.notConfigured {
+            tcgPlayerState = .notConfigured
+        } catch {
+            tcgPlayerState = .error(error.localizedDescription)
+        }
+    }
+
+    // MARK: - PriceCharting
+
+    private func loadPriceChartingPrices() async {
+        guard let consoleName = card.game.priceChartingConsoleName else {
+            priceChartingState = .unavailable
+            return
+        }
+        do {
+            let price = try await priceChartingService.searchPrice(name: card.name, consoleName: consoleName)
+            priceChartingPrice = price
+            priceChartingState = price != nil ? .loaded : .notFound
+        } catch PriceChartingError.notConfigured {
+            priceChartingState = .notConfigured
+        } catch {
+            priceChartingState = .error(error.localizedDescription)
+        }
     }
 
     // MARK: - Filtered / Sorted Articles
@@ -105,8 +168,6 @@ final class CardPriceViewModel: ObservableObject {
 
         return result
     }
-
-    // MARK: - Price Summary
 
     var lowestPrice: Double? {
         filteredArticles.map { $0.price }.min()

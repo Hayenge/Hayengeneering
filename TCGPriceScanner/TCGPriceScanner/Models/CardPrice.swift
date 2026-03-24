@@ -164,4 +164,8 @@ extension Double {
     func priceString(currency: String = "€") -> String {
         String(format: "\(currency) %.2f", self)
     }
+
+    func usdString() -> String {
+        String(format: "$%.2f", self)
+    }
 }

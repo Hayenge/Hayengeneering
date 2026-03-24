@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>TCG Prices</string>
+	<string>TCG Card Market</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -23,7 +23,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>TCG Price Scanner uses the camera to scan your trading cards and look up their current market value on CardMarket.</string>
+	<string>TCG Card Market uses the camera to scan your trading cards and look up their current prices on TCGPlayer and PriceCharting.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow access to your photo library to scan card images from your photos.</string>
 	<key>UIApplicationSceneManifest</key>
