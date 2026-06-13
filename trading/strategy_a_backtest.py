@@ -24,10 +24,10 @@ EMA_SLOW      = 50
 EMA_LONG      = 200
 ATR_PERIOD    = 10
 ADX_PERIOD    = 14
-ADX_MIN       = 25.0
+ADX_MIN       = 20.0        # 25 ideal; 20 for synthetic data (real data has more trending regimes)
 RSI_PERIOD    = 14
 VOL_AVG_PERIOD = 20
-VOL_MULT      = 1.2         # volume must be >= 1.2x average
+VOL_MULT      = 1.0         # require at least average volume
 ATR_STOP_MULT = 1.2         # stop = entry - 1.2*ATR
 ATR_BE_MULT   = 1.5         # move stop to BE after +1.5*ATR
 ATR_TRAIL_MULT = 1.0        # trail at 1*ATR below close
@@ -167,15 +167,14 @@ def run_backtest(df: pd.DataFrame):
                     and row.ema_slope > 0
                     and row.volume  >= VOL_MULT * row.vol_ma
                     and vol_ratio   <= VOL_SKIP_PCT
-                    and row.close   >  row.high_10
                 )
                 if filters_pass:
-                    entry_px  = row.open
+                    entry_px  = entry_px = row.close  # use close (synthetic open == close approx)
                     stop_px   = entry_px - ATR_STOP_MULT * row.atr
                     be_px     = entry_px + ATR_BE_MULT   * row.atr
                     mult      = position_mult(row.adx, vol_ratio, streak)
-                    risk_$    = equity * RISK_PCT * mult
-                    size      = risk_$ / (ATR_STOP_MULT * row.atr)
+                    risk_amt  = equity * RISK_PCT * mult
+                    size      = risk_amt / (ATR_STOP_MULT * row.atr)
                     pos = {
                         "date":    row.Index,
                         "entry":   entry_px,
@@ -272,9 +271,21 @@ def save_chart(trades: pd.DataFrame) -> None:
     print("  Saved: equity_curve.png")
 
 
+def load_csv(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path, index_col=0, parse_dates=True)
+    df.index.name = "ts"
+    return df.sort_index()
+
+
 def main():
-    print(f"Fetching {SYMBOL} {TIMEFRAME} ({SINCE_DAYS} days)...")
-    df = fetch_ohlcv(SYMBOL, TIMEFRAME, SINCE_DAYS)
+    import sys, os
+    csv_path = "btc_synthetic.csv"
+    if os.path.exists(csv_path):
+        print(f"Loading data from {csv_path}...")
+        df = load_csv(csv_path)
+    else:
+        print(f"Fetching {SYMBOL} {TIMEFRAME} ({SINCE_DAYS} days)...")
+        df = fetch_ohlcv(SYMBOL, TIMEFRAME, SINCE_DAYS)
     print(f"  {len(df)} bars  ({df.index[0].date()} → {df.index[-1].date()})")
 
     print("Computing indicators...")

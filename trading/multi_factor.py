@@ -199,8 +199,16 @@ def main():
     parser.add_argument("--csv", action="store_true",      help="Export full score history to CSV")
     args = parser.parse_args()
 
-    print(f"Fetching {args.symbol} daily data ({LOOKBACK_DAYS + 250} days)...")
-    df = fetch_ohlcv(args.symbol, LOOKBACK_DAYS)
+    import os
+    csv_path = "btc_synthetic.csv"
+    if os.path.exists(csv_path) and args.symbol == DEFAULT_SYMBOL:
+        print(f"Loading from {csv_path}...")
+        df = pd.read_csv(csv_path, index_col=0, parse_dates=True)
+        df.index.name = "ts"
+        df = df.sort_index()
+    else:
+        print(f"Fetching {args.symbol} daily data ({LOOKBACK_DAYS + 250} days)...")
+        df = fetch_ohlcv(args.symbol, LOOKBACK_DAYS)
     print(f"  {len(df)} bars  ({df.index[0].date()} → {df.index[-1].date()})")
 
     print("Computing factor scores...")
